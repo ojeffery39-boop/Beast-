@@ -1,5 +1,5 @@
-import type { EvidenceRef } from "./contracts";
-import type { ModelAdapter } from "./model";
+import type { EvidenceRef } from "./contracts.js";
+import type { ModelAdapter } from "./model.js";
 export interface RetrievedDocument { id: string; url: string; title: string; text: string; retrievedAt: string; }
 export interface SearchProvider { search(query: string, limit: number): Promise<RetrievedDocument[]>; }
 export interface ResearchReport {
