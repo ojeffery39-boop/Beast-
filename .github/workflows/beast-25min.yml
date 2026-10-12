@@ -1,0 +1,42 @@
+name: Beast 25-minute research checks
+on:
+  schedule:
+    # 25-minute cadence repeats every five hours (UTC).
+    - cron: '0,25,50 0,5,10,15,20 * * *'
+    - cron: '15,40 1,6,11,16,21 * * *'
+    - cron: '5,30,55 2,7,12,17,22 * * *'
+    - cron: '20,45 3,8,13,18,23 * * *'
+    - cron: '10,35 4,9,14,19,24 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: beast-research-check
+  cancel-in-progress: false
+jobs:
+  offline-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run independent research checks
+        id: check
+        shell: bash
+        run: |
+          mkdir -p research-runs
+          set +e
+          node --test tests/research-evaluator.test.mjs tests/research-cycle.test.mjs tests/gemini-proposer.test.mjs > research-runs/tests.log 2>&1
+          code=$?
+          set -e
+          STATUS=$([ "$code" -eq 0 ] && echo PASS || echo FAIL)
+          STATUS="$STATUS" EXIT_CODE="$code" node --input-type=module -e 'import {writeFileSync} from "node:fs"; const data={schemaVersion:1,kind:"offline_research_check",status:process.env.STATUS,exitCode:Number(process.env.EXIT_CODE),time:new Date().toISOString(),commit:process.env.GITHUB_SHA,providerCalled:false,autonomousModification:false,acceptanceClaim:false};writeFileSync("research-runs/manifest.json",JSON.stringify(data,null,2)+"\\n");'
+          exit "$code"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: beast-research-${{ github.run_id }}
+          path: research-runs/
+          retention-days: 30
