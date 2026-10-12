@@ -4,7 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 const port = Number(process.env.PORT || 3000);
 const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const html = new URL("../web/chat.html", import.meta.url);
-const dataFile = process.env.BEAST_DATA_FILE || "/data/history.json";
+const dataFile = process.env.BEAST_DATA_FILE || "/tmp/beast-history.json";
 const history = new Map();
 const accessToken = process.env.BEAST_ACCESS_TOKEN;
 function authenticated(req) {
