@@ -1,4 +1,4 @@
-import type { Experiment, RunStatus } from "./contracts";
+import type { Experiment, RunStatus } from "./contracts.js";
 
 /** Pure guard, not a substitute for independently run tests or authorization. */
 const transitions: Record<RunStatus, readonly RunStatus[]> = {
