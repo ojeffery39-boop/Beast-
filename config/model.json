@@ -1,0 +1,8 @@
+{
+  "displayName": "GPT Luna 5.6",
+  "provider": null,
+  "modelId": null,
+  "enabled": false,
+  "selectionStatus": "awaiting_verified_provider_and_model_id",
+  "notes": "User-requested model label. Do not infer API identifier, availability, or compatibility from display name. Configure provider and modelId only after verifying a real accessible endpoint."
+}
