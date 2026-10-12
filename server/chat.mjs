@@ -1,3 +1,4 @@
+import { generate } from "./gemini-router.mjs";
 import { createServer } from "node:http";
 import { readFile, mkdir, writeFile, rename } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
@@ -69,53 +70,19 @@ async function openModelFallback(contents) {
   return result.trim();
 }
 async function reply(text, prior) {
-  const contents = [...prior, {role:"user",parts:[{text}]}];
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    const fallback = await openModelFallback(contents);
-    if (fallback !== null) return fallback;
-    throw new Error("No AI provider configured");
-  }
-  let lastError;
-  for (let attempt=0;attempt<3;attempt++) {
-    try {
-      const model = await resolveModel(key);
-      const response = await fetch(GEMINI_BASE+"models/"+encodeURIComponent(model)+":generateContent",{
-        method:"POST",signal:AbortSignal.timeout(25000),
-        headers:{"content-type":"application/json","x-goog-api-key":key},
-        body:JSON.stringify({systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},contents,generationConfig:{maxOutputTokens:1600,temperature:0.7}})
-      });
-      if (response.ok) {
-        const data=await response.json();
-        const candidate=data.candidates?.[0];
-        const answer=(candidate?.content?.parts??[]).map(p=>p.text||"").join("").trim();
-        if (candidate?.finishReason==="MAX_TOKENS") console.warn("Gemini response reached token limit");
-        if (!answer) throw new Error("Gemini returned no text");
-        return answer;
-      }
-      let detail="";
-      try {const err=await response.json();detail=String(err?.error?.message||"").slice(0,350);}catch{}
-      console.error("Gemini API failure",JSON.stringify({status:response.status,model,attempt:attempt+1,detail}));
-      if (response.status===404) {selectedModel=null;selectedAt=0;}
-      lastError=new Error("Gemini request failed ("+response.status+")");
-      if (![429,500,502,503,504].includes(response.status)) break;
-      if (attempt<2) {
-        const retryAfter=Number(response.headers.get("retry-after"));
-        await sleep(Number.isFinite(retryAfter)&&retryAfter>0 ? Math.min(retryAfter*1000,5000) : 800*(attempt+1));
-      }
-    } catch(error) {
-      lastError=error;
-      console.error("Gemini transport failure",error instanceof Error ? error.message : "Unknown error");
-      if (attempt<2) await sleep(800*(attempt+1));
+  const contents=[...prior,{role:"user",parts:[{text}]}];
+  if(process.env.GEMINI_API_KEY) {
+    try { const result=await generate({key:process.env.GEMINI_API_KEY,contents}); selectedModel=result.model; return result.answer; }
+    catch(error) {
+      console.warn("Gemini models exhausted",error instanceof Error?error.message:"Unknown provider error");
+      const fallback=await openModelFallback(contents);
+      if(fallback!==null){selectedModel=process.env.BEAST_FALLBACK_MODEL;return fallback;}
+      throw error;
     }
   }
-  try {
-    const fallback=await openModelFallback(contents);
-    if (fallback!==null) return fallback;
-  } catch(error) {
-    console.error("Configured fallback failed",error instanceof Error ? error.message : "Unknown error");
-  }
-  throw lastError||new Error("All AI providers unavailable");
+  const fallback=await openModelFallback(contents);
+  if(fallback!==null){selectedModel=process.env.BEAST_FALLBACK_MODEL;return fallback;}
+  throw Error("No AI provider configured");
 }
 
 if (!accessToken || accessToken.length < 24) throw new Error("BEAST_ACCESS_TOKEN must be set to a random secret of at least 24 characters");
