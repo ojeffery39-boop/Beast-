@@ -5,6 +5,7 @@ services:
     init: true
     environment:
       PORT: "3000"
+      HOST: "0.0.0.0"
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in a private .env file}
     ports:
