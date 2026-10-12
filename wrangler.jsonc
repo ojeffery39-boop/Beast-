@@ -1,0 +1,14 @@
+{
+  "name": "beast-observatory",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "beast-memory",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ],
+  "triggers": { "crons": ["0 */6 * * *"] }
+}
