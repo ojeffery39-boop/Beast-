@@ -1,0 +1,31 @@
+name: Gemini connection smoke test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/gemini-smoke.yml'
+jobs:
+  gemini:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check secret presence and call Gemini once
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY is not set in this repository's Actions secrets"
+            exit 1
+          fi
+          code=$(curl --silent --show-error --max-time 25 -o /tmp/gemini_response.json -w '%{http_code}' \
+            -X POST 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' \
+            -H 'Content-Type: application/json' \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            -d '{"contents":[{"parts":[{"text":"Reply with the single word READY."}]}],"generationConfig":{"maxOutputTokens":32}}')
+          echo "Gemini HTTP status: $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Gemini connection failed; HTTP $code. Check model access, quota, billing and key restrictions."
+            exit 1
+          fi
+          node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync("/tmp/gemini_response.json","utf8"));if(!d.candidates?.length)process.exit(1);console.log("Gemini returned a candidate successfully (response content hidden).")'
