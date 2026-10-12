@@ -45,4 +45,4 @@ createServer(async (req, res) => {
     history.set(id, next.slice(-20));
     send(res, 200, {status:silent?"silent":"replied", reply:silent?null:answer});
   } catch (error) { send(res, 502, {error:error instanceof Error ? error.message : "Request failed"}); }
-}).listen(port, "127.0.0.1", () => console.log("Beast local chat on http://127.0.0.1:" + port));
+}).listen(port, process.env.HOST || "127.0.0.1", () => console.log("Beast chat listening on configured interface, port " + port));
