@@ -60,7 +60,7 @@ async function openModelFallback(contents) {
   const url = new URL(endpoint);
   if (url.protocol !== "https:" && !(url.hostname === "127.0.0.1" || url.hostname === "localhost")) throw new Error("Fallback endpoint must use HTTPS");
   const messages = [{role:"system",content:SYSTEM_PROMPT},...contents.map(c => ({role:c.role === "model" ? "assistant" : "user",content:(c.parts||[]).map(p=>p.text||"").join("")}))];
-  const response = await fetch(url, {method:"POST",signal:AbortSignal.timeout(30000),headers:{"content-type":"application/json",...(process.env.BEAST_FALLBACK_API_KEY ? {authorization:"Bearer "+process.env.BEAST_FALLBACK_API_KEY} : {})},body:JSON.stringify({model,messages,max_tokens:800,temperature:0.7})});
+  const response = await fetch(url, {method:"POST",signal:AbortSignal.timeout(30000),headers:{"content-type":"application/json",...(process.env.BEAST_FALLBACK_API_KEY ? {authorization:"Bearer "+process.env.BEAST_FALLBACK_API_KEY} : {})},body:JSON.stringify({model,messages,max_tokens:1600,temperature:0.7})});
   if (!response.ok) throw new Error("Fallback model failed ("+response.status+")");
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content;
@@ -83,11 +83,15 @@ async function reply(text, prior) {
       const response = await fetch(GEMINI_BASE+"models/"+encodeURIComponent(model)+":generateContent",{
         method:"POST",signal:AbortSignal.timeout(25000),
         headers:{"content-type":"application/json","x-goog-api-key":key},
-        body:JSON.stringify({systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},contents,generationConfig:{maxOutputTokens:800,temperature:0.7}})
+        body:JSON.stringify({systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},contents,generationConfig:{maxOutputTokens:1600,temperature:0.7}})
       });
       if (response.ok) {
         const data=await response.json();
-        return (data.candidates?.[0]?.content?.parts??[]).map(p=>p.text||"").join("").trim();
+        const candidate=data.candidates?.[0];
+        const answer=(candidate?.content?.parts??[]).map(p=>p.text||"").join("").trim();
+        if (candidate?.finishReason==="MAX_TOKENS") console.warn("Gemini response reached token limit");
+        if (!answer) throw new Error("Gemini returned no text");
+        return answer;
       }
       let detail="";
       try {const err=await response.json();detail=String(err?.error?.message||"").slice(0,350);}catch{}
