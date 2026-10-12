@@ -49,30 +49,71 @@ await loadHistory();
 const MAX_BODY = 16000;
 const send = (res, status, body) => { res.writeHead(status, {"content-type":"application/json; charset=utf-8","cache-control":"no-store"}); res.end(JSON.stringify(body)); };
 function validMessage(value) { return typeof value === "string" && value.trim().length > 0 && value.length <= 4000; }
-async function reply(text, prior) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY is not configured on the server");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const contents = [...prior, { role: "user", parts: [{ text }] }];
-    const model = await resolveModel(key);
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-      method: "POST", signal: controller.signal,
-      headers: { "content-type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: "You are Beast, an AI research assistant. You are not a human or an uploaded consciousness. Never invent autobiographical memories, subjective experiences, or private thoughts. Be factual, candid and concise. You may reply with exactly [SILENT] when no response would be useful, but answer direct user questions unless unsafe." }] }, contents, generationConfig: { maxOutputTokens: 800, temperature: 0.7 } })
-    });
-    if (!response.ok) {
-      if (response.status === 404) { selectedModel = null; selectedAt = 0; }
-      let detail = "";
-      try { const err = await response.json(); detail = String(err?.error?.message || "").slice(0, 350); } catch {}
-      console.error("Gemini API failure", JSON.stringify({status:response.status, model, detail}));
-      throw new Error("Gemini request failed (" + response.status + ")" + (response.status === 404 ? ": model not found or unavailable" : response.status === 429 ? ": quota or rate limit exceeded" : ""));
-    }
-    const data = await response.json();
-    return (data.candidates?.[0]?.content?.parts ?? []).map(p => p.text || "").join("").trim();
-  } finally { clearTimeout(timeout); }
+const SYSTEM_PROMPT = "You are Beast, an AI research assistant. You are not a human or an uploaded consciousness. Never invent autobiographical memories, subjective experiences, or private thoughts. Be factual, candid and concise. You may reply with exactly [SILENT] when no response would be useful, but answer direct user questions unless unsafe.";
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function openModelFallback(contents) {
+  // Configure BEAST_FALLBACK_URL with a trusted HTTPS OpenAI-compatible chat completions endpoint.
+  // Never send chat history to an untrusted server. A local endpoint requires a private network.
+  const endpoint = process.env.BEAST_FALLBACK_URL;
+  const model = process.env.BEAST_FALLBACK_MODEL;
+  if (!endpoint || !model) return null;
+  const url = new URL(endpoint);
+  if (url.protocol !== "https:" && !(url.hostname === "127.0.0.1" || url.hostname === "localhost")) throw new Error("Fallback endpoint must use HTTPS");
+  const messages = [{role:"system",content:SYSTEM_PROMPT},...contents.map(c => ({role:c.role === "model" ? "assistant" : "user",content:(c.parts||[]).map(p=>p.text||"").join("")}))];
+  const response = await fetch(url, {method:"POST",signal:AbortSignal.timeout(30000),headers:{"content-type":"application/json",...(process.env.BEAST_FALLBACK_API_KEY ? {authorization:"Bearer "+process.env.BEAST_FALLBACK_API_KEY} : {})},body:JSON.stringify({model,messages,max_tokens:800,temperature:0.7})});
+  if (!response.ok) throw new Error("Fallback model failed ("+response.status+")");
+  const data = await response.json();
+  const result = data.choices?.[0]?.message?.content;
+  if (typeof result !== "string" || !result.trim()) throw new Error("Fallback model returned no text");
+  console.log("Beast reply served by configured fallback model");
+  return result.trim();
 }
+async function reply(text, prior) {
+  const contents = [...prior, {role:"user",parts:[{text}]}];
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const fallback = await openModelFallback(contents);
+    if (fallback !== null) return fallback;
+    throw new Error("No AI provider configured");
+  }
+  let lastError;
+  for (let attempt=0;attempt<3;attempt++) {
+    try {
+      const model = await resolveModel(key);
+      const response = await fetch(GEMINI_BASE+"models/"+encodeURIComponent(model)+":generateContent",{
+        method:"POST",signal:AbortSignal.timeout(25000),
+        headers:{"content-type":"application/json","x-goog-api-key":key},
+        body:JSON.stringify({systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},contents,generationConfig:{maxOutputTokens:800,temperature:0.7}})
+      });
+      if (response.ok) {
+        const data=await response.json();
+        return (data.candidates?.[0]?.content?.parts??[]).map(p=>p.text||"").join("").trim();
+      }
+      let detail="";
+      try {const err=await response.json();detail=String(err?.error?.message||"").slice(0,350);}catch{}
+      console.error("Gemini API failure",JSON.stringify({status:response.status,model,attempt:attempt+1,detail}));
+      if (response.status===404) {selectedModel=null;selectedAt=0;}
+      lastError=new Error("Gemini request failed ("+response.status+")");
+      if (![429,500,502,503,504].includes(response.status)) break;
+      if (attempt<2) {
+        const retryAfter=Number(response.headers.get("retry-after"));
+        await sleep(Number.isFinite(retryAfter)&&retryAfter>0 ? Math.min(retryAfter*1000,5000) : 800*(attempt+1));
+      }
+    } catch(error) {
+      lastError=error;
+      console.error("Gemini transport failure",error instanceof Error ? error.message : "Unknown error");
+      if (attempt<2) await sleep(800*(attempt+1));
+    }
+  }
+  try {
+    const fallback=await openModelFallback(contents);
+    if (fallback!==null) return fallback;
+  } catch(error) {
+    console.error("Configured fallback failed",error instanceof Error ? error.message : "Unknown error");
+  }
+  throw lastError||new Error("All AI providers unavailable");
+}
+
 if (!accessToken || accessToken.length < 24) throw new Error("BEAST_ACCESS_TOKEN must be set to a random secret of at least 24 characters");
 createServer(async (req, res) => {
   if (!authenticated(req)) {
