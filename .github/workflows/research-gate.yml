@@ -1,0 +1,24 @@
+name: Beast research gate
+on:
+  push:
+    paths:
+      - "src/research-evaluator.mjs"
+      - "tests/research-evaluator.test.mjs"
+      - "src/research-cycle.mjs"
+      - "tests/research-cycle.test.mjs"
+      - ".github/workflows/research-gate.yml"
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run fixed research tests
+        run: node --test tests/research-evaluator.test.mjs tests/research-cycle.test.mjs
