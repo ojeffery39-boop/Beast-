@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {CASES} from "../src/research-evaluator.mjs";
+import {evaluateCycle} from "../src/research-cycle.mjs";
+const correct=CASES.map(c=>c.expected);
+test("records a strictly improving candidate",()=>{const r=evaluateCycle({candidate:{answers:correct},baseline:{score:5}});assert.equal(r.accepted,true);assert.equal(r.score,6);assert.equal(r.results.length,6)});
+test("rejects candidates with no improvement",()=>{const r=evaluateCycle({candidate:{answers:correct},baseline:{score:6}});assert.equal(r.reason,"no_strict_improvement")});
+test("rejects incorrect answers",()=>{const r=evaluateCycle({candidate:{answers:Array(6).fill("yes")},baseline:{score:0}});assert.equal(r.reason,"failed_external_tests")});
+test("rejects duplicate candidates",()=>{const a=evaluateCycle({candidate:{answers:correct},baseline:{score:5}});const b=evaluateCycle({candidate:{answers:correct},baseline:{score:5},seen:[a.fingerprint]});assert.equal(b.reason,"duplicate")});
+test("rejects malformed proposals",()=>assert.throws(()=>evaluateCycle({candidate:{},baseline:{score:0}})));
