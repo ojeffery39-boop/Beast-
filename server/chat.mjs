@@ -2,7 +2,23 @@ import { createServer } from "node:http";
 import { readFile, mkdir, writeFile, rename } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 const port = Number(process.env.PORT || 3000);
-const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const preferredModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+let selectedModel = null;
+let selectedAt = 0;
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
+async function resolveModel(key) {
+  if (selectedModel && Date.now() - selectedAt < 3600000) return selectedModel;
+  const response = await fetch(GEMINI_BASE + "models?pageSize=100", {headers: {"x-goog-api-key":key}, signal:AbortSignal.timeout(10000)});
+  if (!response.ok) throw new Error("Gemini model discovery failed (" + response.status + ")");
+  const data = await response.json();
+  const supported = (data.models || []).filter(m => m.supportedGenerationMethods?.includes("generateContent")).map(m => m.name?.replace(/^models\//,"")).filter(Boolean);
+  if (!supported.length) throw new Error("No generateContent models available for this API key");
+  const choices = [preferredModel, "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+  selectedModel = choices.find(m => supported.includes(m)) || supported.find(m => /flash/i.test(m)) || supported[0];
+  selectedAt = Date.now();
+  console.log("Gemini model selected:", selectedModel);
+  return selectedModel;
+}
 const html = new URL("../web/chat.html", import.meta.url);
 const dataFile = process.env.BEAST_DATA_FILE || "/tmp/beast-history.json";
 const history = new Map();
@@ -40,6 +56,7 @@ async function reply(text, prior) {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const contents = [...prior, { role: "user", parts: [{ text }] }];
+    const model = await resolveModel(key);
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
       method: "POST", signal: controller.signal,
       headers: { "content-type": "application/json", "x-goog-api-key": key },
@@ -68,12 +85,12 @@ createServer(async (req, res) => {
   }
   // Authenticated, read-only connectivity check. No chat history is read or written.
   if (req.method === "POST" && req.url === "/api/diagnostics/gemini") {
-    if (!process.env.GEMINI_API_KEY) { send(res, 503, {status:"error", model, error:"GEMINI_API_KEY is not configured"}); return; }
+    if (!process.env.GEMINI_API_KEY) { send(res, 503, {status:"error", error:"GEMINI_API_KEY is not configured"}); return; }
     try {
       const result = await reply("Reply with the single word READY.", []);
-      send(res, 200, {status:"connected", model, responded: Boolean(result), reply:result.slice(0, 80)});
+      send(res, 200, {status:"connected", model:selectedModel, responded: Boolean(result), reply:result.slice(0, 80)});
     } catch (error) {
-      send(res, 502, {status:"error", model, error:error instanceof Error ? error.message : "Gemini check failed"});
+      send(res, 502, {status:"error", model:selectedModel, error:error instanceof Error ? error.message : "Gemini check failed"});
     }
     return;
   }
