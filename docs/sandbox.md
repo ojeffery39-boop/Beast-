@@ -16,7 +16,7 @@ A computer or server running Docker Compose, internet access for Gemini, and a G
 - Container is non-root, has a read-only root filesystem, no added Linux capabilities, and local-only published port.
 - The container **has network egress** to call Gemini. This is not a fully network-isolated execution sandbox.
 - The Docker volume `beast-data` exists for future persistent storage. The current chat implementation does **not** persist conversations or memory to it.
-- The current chat server binds to 127.0.0.1 **inside the container**, so Docker port forwarding cannot reach it yet. The server must support a configurable bind address before this compose setup is operational.
+- The server binds to the container interface using HOST=0.0.0.0, while Compose publishes its port only on the host loopback address. This does not provide authentication.
 - The current chat is a single-user prototype with no authentication or rate limiting; do not put it on a public host.
 - Gemini usage may be subject to free-tier limits. GitHub Actions secrets do not automatically populate the host's `.env`.
 - Beast does not yet autonomously schedule research, modify source, or deploy code. Independent evaluation is a future integration.
