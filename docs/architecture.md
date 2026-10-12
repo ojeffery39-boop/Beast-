@@ -22,7 +22,7 @@
 
 ## Migration status
 
-GitHub repository initialized independently of Floot. The original Floot source cannot yet be read because its daily build-action limit is exhausted. No database export has been performed. Existing Beast identity, memory and source code remain in Floot until verified migration.
+GitHub repository initialized independently of Floot. The original Floot source cannot yet be read because its daily build-action limit is exhausted. No database export has been performed. Legacy Beast persona and its autobiographical memories must not be migrated. Only authorized functional source code and separately approved operational research data may be migrated after inspection. The original Floot project remains unchanged.
 
 ## Initial verification checklist
 
