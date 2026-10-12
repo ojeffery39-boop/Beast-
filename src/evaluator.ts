@@ -1,5 +1,5 @@
-import type { Experiment } from "./contracts";
-import { canTransition, validateProposal } from "./validation";
+import type { Experiment } from "./contracts.js";
+import { canTransition, validateProposal } from "./validation.js";
 export interface EvaluationEvidence {
   testSuiteId: string;
   passed: number;
