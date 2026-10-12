@@ -45,7 +45,12 @@ async function reply(text, prior) {
       headers: { "content-type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: "You are Beast, an AI research assistant. You are not a human or an uploaded consciousness. Never invent autobiographical memories, subjective experiences, or private thoughts. Be factual, candid and concise. You may reply with exactly [SILENT] when no response would be useful, but answer direct user questions unless unsafe." }] }, contents, generationConfig: { maxOutputTokens: 800, temperature: 0.7 } })
     });
-    if (!response.ok) throw new Error("Gemini request failed (" + response.status + ")");
+    if (!response.ok) {
+      let detail = "";
+      try { const err = await response.json(); detail = String(err?.error?.message || "").slice(0, 350); } catch {}
+      console.error("Gemini API failure", JSON.stringify({status:response.status, model, detail}));
+      throw new Error("Gemini request failed (" + response.status + ")" + (response.status === 404 ? ": model not found or unavailable" : response.status === 429 ? ": quota or rate limit exceeded" : ""));
+    }
     const data = await response.json();
     return (data.candidates?.[0]?.content?.parts ?? []).map(p => p.text || "").join("").trim();
   } finally { clearTimeout(timeout); }
@@ -60,6 +65,17 @@ createServer(async (req, res) => {
   if (req.method === "GET" && (req.url === "/" || req.url === "/chat")) {
     res.writeHead(200, {"content-type":"text/html; charset=utf-8","cache-control":"no-store"});
     try { res.end(await readFile(html)); } catch { res.end("Chat UI unavailable"); } return;
+  }
+  // Authenticated, read-only connectivity check. No chat history is read or written.
+  if (req.method === "POST" && req.url === "/api/diagnostics/gemini") {
+    if (!process.env.GEMINI_API_KEY) { send(res, 503, {status:"error", model, error:"GEMINI_API_KEY is not configured"}); return; }
+    try {
+      const result = await reply("Reply with the single word READY.", []);
+      send(res, 200, {status:"connected", model, responded: Boolean(result), reply:result.slice(0, 80)});
+    } catch (error) {
+      send(res, 502, {status:"error", model, error:error instanceof Error ? error.message : "Gemini check failed"});
+    }
+    return;
   }
   if (req.method !== "POST" || req.url !== "/api/chat") { send(res, 404, {error:"Not found"}); return; }
   // Single-user sandbox with Basic authentication; require TLS at any remote reverse proxy.
