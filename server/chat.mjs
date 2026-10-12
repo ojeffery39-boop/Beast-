@@ -13,8 +13,8 @@ async function resolveModel(key) {
   const data = await response.json();
   const supported = (data.models || []).filter(m => m.supportedGenerationMethods?.includes("generateContent")).map(m => m.name?.replace(/^models\//,"")).filter(Boolean);
   if (!supported.length) throw new Error("No generateContent models available for this API key");
-  const choices = [preferredModel, "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
-  selectedModel = choices.find(m => supported.includes(m)) || supported.find(m => /flash/i.test(m)) || supported[0];
+  const choices = ["gemini-3.8-flash", preferredModel, "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+  selectedModel = choices.find(m => supported.includes(m)) || supported.find(m => /gemini-3.*flash/i.test(m)) || supported.find(m => /flash/i.test(m)) || supported[0];
   selectedAt = Date.now();
   console.log("Gemini model selected:", selectedModel);
   return selectedModel;
@@ -63,6 +63,7 @@ async function reply(text, prior) {
       body: JSON.stringify({ systemInstruction: { parts: [{ text: "You are Beast, an AI research assistant. You are not a human or an uploaded consciousness. Never invent autobiographical memories, subjective experiences, or private thoughts. Be factual, candid and concise. You may reply with exactly [SILENT] when no response would be useful, but answer direct user questions unless unsafe." }] }, contents, generationConfig: { maxOutputTokens: 800, temperature: 0.7 } })
     });
     if (!response.ok) {
+      if (response.status === 404) { selectedModel = null; selectedAt = 0; }
       let detail = "";
       try { const err = await response.json(); detail = String(err?.error?.message || "").slice(0, 350); } catch {}
       console.error("Gemini API failure", JSON.stringify({status:response.status, model, detail}));
