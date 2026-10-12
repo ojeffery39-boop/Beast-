@@ -6,11 +6,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "test:research": "node --test tests/research-evaluator.test.mjs tests/research-cycle.test.mjs tests/gemini-proposer.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
     "@types/node": "^22.18.0"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
   }
 }
