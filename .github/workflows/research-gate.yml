@@ -5,7 +5,9 @@ on:
       - "src/research-evaluator.mjs"
       - "tests/research-evaluator.test.mjs"
       - "src/research-cycle.mjs"
+      - "src/gemini-proposer.mjs"
       - "tests/research-cycle.test.mjs"
+      - "tests/gemini-proposer.test.mjs"
       - ".github/workflows/research-gate.yml"
   pull_request:
   workflow_dispatch:
@@ -21,4 +23,4 @@ jobs:
         with:
           node-version: "22"
       - name: Run fixed research tests
-        run: node --test tests/research-evaluator.test.mjs tests/research-cycle.test.mjs
+        run: node --test tests/research-evaluator.test.mjs tests/research-cycle.test.mjs tests/gemini-proposer.test.mjs
